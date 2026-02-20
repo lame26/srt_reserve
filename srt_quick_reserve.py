@@ -48,9 +48,9 @@ def send_telegram(message):
 
 def is_waiting_queue_screen(d):
     return (
-        d(text="접속대기 중입니다.").exists(timeout=1)
+        d(textContains="접속대기").exists(timeout=1)
         or d(textContains="나의 대기순서").exists(timeout=1)
-        or d(textContains="잠시만 기다리시면").exists(timeout=1)
+        or d(textContains="잠시만 기다리").exists(timeout=1)
     )
 
 
