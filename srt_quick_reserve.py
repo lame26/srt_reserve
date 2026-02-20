@@ -13,8 +13,10 @@ SRT 간편예매 자동화 스크립트
   C:\\Python314\\python.exe D:\\srt\\srt_quick_reserve.py
 """
 
+import os
 import sys
 import time
+from urllib import error, parse, request
 
 try:
     import uiautomator2 as u2
@@ -22,7 +24,34 @@ except ImportError:
     print("pip install uiautomator2")
     sys.exit(1)
 
+
 DEVICE_ADDR = "emulator-5554"
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "")
+TELEGRAM_CHAT_ID = os.getenv("TELEGRAM_CHAT_ID", "")
+
+
+def send_telegram(message):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    payload = parse.urlencode({"chat_id": TELEGRAM_CHAT_ID, "text": message}).encode("utf-8")
+
+    try:
+        req = request.Request(url, data=payload, method="POST")
+        req.add_header("Content-Type", "application/x-www-form-urlencoded")
+        with request.urlopen(req, timeout=5):
+            pass
+    except (error.URLError, TimeoutError) as e:
+        print(f"텔레그램 전송 실패({e})")
+
+
+def is_waiting_queue_screen(d):
+    return (
+        d(text="접속대기 중입니다.").exists(timeout=1)
+        or d(textContains="나의 대기순서").exists(timeout=1)
+        or d(textContains="잠시만 기다리시면").exists(timeout=1)
+    )
 
 
 def main():
@@ -35,16 +64,26 @@ def main():
     input("준비되면 Enter...")
     print()
 
+    send_telegram("[SRT] 예약 시도 시작")
+
     attempt = 0
     while True:
         attempt += 1
         print(f"[{attempt}회] 열차 예약하기 클릭...", end=" ", flush=True)
 
         try:
+            if is_waiting_queue_screen(d):
+                print("접속대기 화면 감지. 잠시 후 재시도...")
+                time.sleep(3)
+                continue
+
             # 열차 예약하기 버튼 클릭 (content-desc 기준)
             btn = d(description="열차 예약하기")
             if not btn.exists(timeout=5):
-                print("버튼 미발견. 간편예매 화면인지 확인하세요.")
+                if is_waiting_queue_screen(d):
+                    print("접속대기 화면 감지. 잠시 후 재시도...")
+                else:
+                    print("버튼 미발견. 간편예매 화면인지 확인하세요.")
                 time.sleep(3)
                 continue
 
@@ -67,10 +106,16 @@ def main():
                 print("🎉 예매 성공 가능성!")
                 print("에뮬레이터를 확인하고 빠르게 결제하세요!")
                 print("=" * 40)
+                send_telegram("[SRT] 예약 성공 가능성 감지! 앱에서 결제를 진행하세요.")
                 input("완료 후 Enter를 눌러 종료...")
                 break
 
         except Exception as e:
+            if is_waiting_queue_screen(d):
+                print("접속대기 화면에서 대기 중...")
+                time.sleep(3)
+                continue
+
             print(f"오류({e})")
 
 
